@@ -41,6 +41,10 @@ private:
                            DWRITE_RENDERING_MODE renderingMode,
                            DWRITE_TEXTURE_TYPE textureType,
                            RECT* bbox);
+    
+    bool isColorFont() const;
+
+    virtual bool generateColorGlyphs(SkGlyph* glyph) const;
 
     SkTDArray<uint8_t> fBits;
     /** The total matrix without the text height scale. */
@@ -64,6 +68,7 @@ private:
     DWRITE_RENDERING_MODE fRenderingMode;
     DWRITE_TEXTURE_TYPE fTextureType;
     DWRITE_MEASURING_MODE fMeasuringMode;
+    const bool fColorFont;
 };
 
 #endif

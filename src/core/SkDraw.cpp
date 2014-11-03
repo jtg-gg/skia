@@ -38,6 +38,9 @@
 #include "SkBitmapProcShader.h"
 #include "SkDrawProcs.h"
 #include "SkMatrixUtils.h"
+#ifdef SK_BUILD_FOR_WIN32
+#include "SkCoreBlitters.h"
+#endif
 
 //#define TRACE_BITMAP_DRAWS
 
@@ -1480,6 +1483,28 @@ static void D1G_RectClip(const SkDraw1Glyph& state, Sk48Dot16 fx, Sk48Dot16 fy, 
             return;
         bounds = &storage;
     }
+
+#ifdef SK_BUILD_FOR_WIN32
+    mask.fRowBytes = glyph.rowBytes();
+    mask.fFormat = static_cast<SkMask::Format>(glyph.fMaskFormat);
+    if (glyph.fColorLayer) { // this is to handle the color glyph
+        for (const SkGlyph::ColorRun* colorRun = glyph.fColorLayer->begin(); colorRun != glyph.fColorLayer->end(); colorRun++) {
+            const SkGlyph* i = &state.fCache->getGlyphIDMetrics(colorRun->fNextGlyphId, glyph.getSubXFixed(), glyph.getSubYFixed());
+            //SkDebugf("Colorglyph id:0x%08x, 0x%08x, color:0x%08x, image:0x%08x%s", i->getGlyphID(), i->fNextGlyphId, color, i->fImage, i->fNextGlyphId == 0 ? "\n" : "");
+            uint8_t* aa = (uint8_t*)i->fImage;
+            if (NULL == aa) {
+                aa = (uint8_t*)state.fCache->findImage(*i);
+                if (NULL == aa) {
+                    continue; // can't rasterize glyph
+                }
+            }
+            mask.fImage = aa;
+            SkARGB32_Opaque_Blitter* blitter = static_cast<SkARGB32_Opaque_Blitter*>(state.fBlitter);
+            blitter->blitMask(mask, *bounds, &colorRun->fColor);
+        }
+        return;
+    }
+#endif
 
     uint8_t* aa = (uint8_t*)glyph.fImage;
     if (nullptr == aa) {
