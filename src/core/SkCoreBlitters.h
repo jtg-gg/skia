@@ -141,6 +141,7 @@ public:
     SkARGB32_Opaque_Blitter(const SkBitmap& device, const SkPaint& paint)
         : INHERITED(device, paint) { SkASSERT(paint.getAlpha() == 0xFF); }
     virtual void blitMask(const SkMask&, const SkIRect&);
+    void blitMask(const SkMask&, const SkIRect&, const SkColor* color);
 
 private:
     typedef SkARGB32_Blitter INHERITED;
