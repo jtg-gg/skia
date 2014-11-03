@@ -21,6 +21,7 @@ class SkPath;
 #define kMaxGlyphWidth (1<<13)
 
 #ifdef SK_BUILD_FOR_WIN32
+#include "SkColor.h"
 class SkChunkAlloc;
 #endif
 

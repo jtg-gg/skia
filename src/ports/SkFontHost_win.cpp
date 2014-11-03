@@ -1023,7 +1023,7 @@ void SkScalerContext_GDI::generateMetrics(SkGlyph* glyph) {
         gdiIntereop->CreateFontFaceFromHdc(fDDC, &dwFontFace);
 
         FLOAT advance = 0;
-        UINT16 glyphId = glyph->getGlyphID(0);
+        UINT16 glyphId = glyph->getGlyphID();
         DWRITE_GLYPH_OFFSET offset;
         offset.advanceOffset = 0.0f;
         offset.ascenderOffset = 0.0f;

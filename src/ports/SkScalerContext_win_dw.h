@@ -34,6 +34,7 @@ protected:
 
 private:
     const void* drawDWMask(const SkGlyph& glyph);
+    bool isColorFont() const;
 
     SkTDArray<uint8_t> fBits;
     /** The total matrix without the text height scale. */
@@ -57,6 +58,7 @@ private:
     DWRITE_RENDERING_MODE fRenderingMode;
     DWRITE_TEXTURE_TYPE fTextureType;
     DWRITE_MEASURING_MODE fMeasuringMode;
+    const bool fColorFont;
 };
 
 #endif
