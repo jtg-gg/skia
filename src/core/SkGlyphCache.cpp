@@ -320,6 +320,11 @@ SkGlyph* SkGlyphCache::lookupMetrics(uint32_t id, MetricsType mtype) {
     glyph = (SkGlyph*)fGlyphAlloc.alloc(sizeof(SkGlyph),
                                         SkChunkAlloc::kThrow_AllocFailType);
     glyph->init(id);
+
+#ifdef SK_BUILD_FOR_WIN32
+    glyph->fGlyphAlloc = &fGlyphAlloc;
+#endif
+
     *fGlyphArray.insert(hi) = glyph;
 
     if (kJustAdvance_MetricsType == mtype) {

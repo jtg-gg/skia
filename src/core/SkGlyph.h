@@ -20,6 +20,11 @@ class SkPath;
 
 #define kMaxGlyphWidth (1<<13)
 
+#ifdef SK_BUILD_FOR_WIN32
+#include "SkColor.h"
+class SkChunkAlloc;
+#endif
+
 struct SkGlyph {
     void*       fImage;
     SkPath*     fPath;
@@ -33,12 +38,24 @@ struct SkGlyph {
     int8_t      fRsbDelta, fLsbDelta;  // used by auto-kerning
     int8_t      fForceBW;
 
+#ifdef SK_BUILD_FOR_WIN32
+    // color glyph
+    SkColor       fColor;
+    SkGlyph*      fNextGlyph;
+    SkChunkAlloc* fGlyphAlloc;
+#endif
+
     void init(uint32_t id) {
         fID             = id;
         fImage          = NULL;
         fPath           = NULL;
         fMaskFormat     = MASK_FORMAT_UNKNOWN;
         fForceBW        = 0;
+#ifdef SK_BUILD_FOR_WIN32
+        fColor          = 0;
+        fNextGlyph      = NULL;
+        fGlyphAlloc     = NULL;
+#endif
     }
 
     /**

@@ -168,16 +168,20 @@ void SkARGB32_Blitter::blitMask(const SkMask& mask, const SkIRect& clip) {
 
 void SkARGB32_Opaque_Blitter::blitMask(const SkMask& mask,
                                        const SkIRect& clip) {
+    blitMask(mask, clip, NULL);
+}
+void SkARGB32_Opaque_Blitter::blitMask(const SkMask& mask,
+                                       const SkIRect& clip, const SkColor* color) {
     SkASSERT(mask.fBounds.contains(clip));
 
-    if (SkBlitMask::BlitColor(fDevice, mask, clip, fColor)) {
+    if (SkBlitMask::BlitColor(fDevice, mask, clip, color ? *color : fColor)) {
         return;
     }
 
     if (mask.fFormat == SkMask::kBW_Format) {
-        SkARGB32_BlitBW(fDevice, mask, clip, fPMColor);
+        SkARGB32_BlitBW(fDevice, mask, clip, color ? *color : fPMColor);
     } else if (SkMask::kARGB32_Format == mask.fFormat) {
-        SkARGB32_Blit32(fDevice, mask, clip, fPMColor);
+        SkARGB32_Blit32(fDevice, mask, clip, color ? *color : fPMColor);
     }
 }
 
