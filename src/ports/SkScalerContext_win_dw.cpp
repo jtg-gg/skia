@@ -29,6 +29,8 @@
 #if SK_HAS_DWRITE_1_H
 #  include <dwrite_1.h>
 #endif
+#include <dwrite_2.h>
+#include "SkGlyphCache.h"
 
 static bool isLCD(const SkScalerContext::Rec& rec) {
     return SkMask::kLCD16_Format == rec.fMaskFormat;
@@ -188,10 +190,21 @@ static bool is_axis_aligned(const SkScalerContext::Rec& rec) {
             both_zero(rec.fPost2x2[0][0], rec.fPost2x2[1][1]));
 }
 
+bool SkScalerContext_DW::isColorFont() const
+{
+  SkTScopedComPtr<IDWriteFontFace2> fontFace2;
+
+  if (SUCCEEDED(fTypeface->fDWriteFontFace->QueryInterface(&fontFace2)))
+    return fontFace2->IsColorFont() ? true : false;
+
+  return false;
+}
+
 SkScalerContext_DW::SkScalerContext_DW(DWriteFontTypeface* typeface,
                                        const SkDescriptor* desc)
         : SkScalerContext(typeface, desc)
         , fTypeface(SkRef(typeface))
+        , fColorFont(isColorFont())
         , fGlyphCount(-1) {
 
     // In general, all glyphs should use CLEARTYPE_NATURAL_SYMMETRIC
@@ -433,6 +446,60 @@ static bool glyph_check_and_set_bounds(SkGlyph* glyph, const RECT& bbox) {
     return true;
 }
 
+bool SkScalerContext_DW::generateColorGlyphs(SkGlyph* glyph) const {
+    if (!fColorFont) return false;
+
+    IDWriteFactory* factory = sk_get_dwrite_factory();
+    SkTScopedComPtr<IDWriteFactory2> factory2;
+    SkTScopedComPtr<IDWriteColorGlyphRunEnumerator> colorLayer;
+
+    HRESULT hr = factory->QueryInterface(&factory2);
+    if (!SUCCEEDED(hr)) return false;
+
+    FLOAT advance = 0;
+    UINT16 glyphId = glyph->getGlyphID();
+    DWRITE_GLYPH_OFFSET offset;
+    offset.advanceOffset = 0.0f;
+    offset.ascenderOffset = 0.0f;
+
+    DWRITE_GLYPH_RUN run;
+    run.glyphCount = 1;
+    run.glyphAdvances = &advance;
+    run.fontFace = fTypeface->fDWriteFontFace.get();
+    run.fontEmSize = fRec.fTextSize;
+    run.bidiLevel = 0;
+    run.glyphIndices = &glyphId;
+    run.isSideways = FALSE;
+    run.glyphOffsets = &offset;
+
+    hr = factory2->TranslateColorGlyphRun(0, 0, &run, NULL, DWRITE_MEASURING_MODE_NATURAL, NULL, 0, &colorLayer);
+    if (!SUCCEEDED(hr)) return false;
+
+    BOOL hasRun;
+    const DWRITE_COLOR_GLYPH_RUN* colorRun;
+    SkGlyph* curGlyph = glyph;
+    while (true) {
+        if (FAILED(colorLayer->MoveNext(&hasRun)) || !hasRun) {
+            break;
+        }
+        if (FAILED(colorLayer->GetCurrentRun(&colorRun))) {
+            break;
+        }
+
+        curGlyph->fNextGlyph = (SkGlyph*)curGlyph->fGlyphCache->allocGlyph(*curGlyph, *colorRun->glyphRun.glyphIndices);
+
+        curGlyph->fNextGlyph->fColor = SkColorSetARGBInline(
+          static_cast<U8CPU>(colorRun->runColor.a * 255), static_cast<U8CPU>(colorRun->runColor.r * 255),
+          static_cast<U8CPU>(colorRun->runColor.g * 255), static_cast<U8CPU>(colorRun->runColor.b * 255));
+        curGlyph->fNextGlyph->fNextGlyph = NULL;
+        curGlyph->fNextGlyph->fMaskFormat = fRec.fMaskFormat;
+
+        curGlyph = curGlyph->fNextGlyph;
+    }
+    return true;
+}
+
+
 void SkScalerContext_DW::generateMetrics(SkGlyph* glyph) {
     glyph->fWidth = 0;
     glyph->fHeight = 0;
@@ -446,6 +513,8 @@ void SkScalerContext_DW::generateMetrics(SkGlyph* glyph) {
          "Requested bounding box could not be determined.");
 
     if (glyph_check_and_set_bounds(glyph, bbox)) {
+        // generate color glyphs should be called after all the vars in SkGlyph struct initialized
+        this->generateColorGlyphs(glyph);
         return;
     }
 
@@ -464,6 +533,9 @@ void SkScalerContext_DW::generateMetrics(SkGlyph* glyph) {
     }
     // TODO: handle the case where a request for DWRITE_TEXTURE_ALIASED_1x1
     // fails, and try DWRITE_TEXTURE_CLEARTYPE_3x1.
+    
+    // generate color glyphs should be called after all the vars in SkGlyph struct initialized
+    this->generateColorGlyphs(glyph);
 }
 
 void SkScalerContext_DW::generateFontMetrics(SkPaint::FontMetrics* metrics) {

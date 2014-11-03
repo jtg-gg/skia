@@ -143,6 +143,7 @@ public:
     virtual void blitMask(const SkMask&, const SkIRect&);
     void blitAntiH2(int x, int y, U8CPU a0, U8CPU a1) override;
     void blitAntiV2(int x, int y, U8CPU a0, U8CPU a1) override;
+    void blitMask(const SkMask&, const SkIRect&, const SkColor* color);
 
 private:
     typedef SkARGB32_Blitter INHERITED;

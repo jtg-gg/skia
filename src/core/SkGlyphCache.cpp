@@ -261,6 +261,16 @@ SkGlyph* SkGlyphCache::lookupByCombinedID(uint32_t id, MetricsType type) {
     return glyph;
 }
 
+#ifdef SK_BUILD_FOR_WIN32
+SkGlyph* SkGlyphCache::allocGlyph(const SkGlyph& glyph, uint16_t id) {
+    SkGlyph* result = (SkGlyph*) fGlyphAlloc.alloc(sizeof(SkGlyph), SkChunkAlloc::kThrow_AllocFailType);
+    *result = glyph;
+    result->fID = id;
+    fMemoryUsed += sizeof(SkGlyph);
+    return result;
+}
+#endif
+
 uint16_t SkGlyphCache::lookupMetrics(uint32_t id, MetricsType mtype) {
     SkASSERT(id != SkGlyph::kImpossibleID);
     // Count is always greater than 0 because of the sentinel.
@@ -300,6 +310,10 @@ uint16_t SkGlyphCache::lookupMetrics(uint32_t id, MetricsType mtype) {
 
     glyph = fGlyphArray.insert(glyph_index);
     glyph->initGlyphFromCombinedID(id);
+
+#ifdef SK_BUILD_FOR_WIN32
+    glyph->fGlyphCache = this;
+#endif
 
     if (kJustAdvance_MetricsType == mtype) {
         fScalerContext->getAdvance(glyph);
