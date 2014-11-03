@@ -64,6 +64,10 @@ public:
     const SkGlyph& getUnicharMetrics(SkUnichar, SkFixed x, SkFixed y);
     const SkGlyph& getGlyphIDMetrics(uint16_t, SkFixed x, SkFixed y);
 
+#ifdef SK_BUILD_FOR_WIN32
+    SkGlyph* allocGlyph(const SkGlyph& glyph, uint16_t id);
+#endif
+
     /** Return the glyphID for the specified Unichar. If the char has already
         been seen, use the existing cache entry. If not, ask the scalercontext
         to compute it for us.

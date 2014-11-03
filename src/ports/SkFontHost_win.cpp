@@ -34,6 +34,11 @@
 #include <usp10.h>
 #include <objbase.h>
 
+#include <dwrite_2.h>
+#include "SkDWrite.h"
+#include "SkTScopedComPtr.h"
+#include "SkGlyphCache.h"
+
 static void (*gEnsureLOGFONTAccessibleProc)(const LOGFONT&);
 
 void SkTypeface_SetEnsureLOGFONTAccessibleProc(void (*proc)(const LOGFONT&)) {
@@ -538,6 +543,7 @@ public:
     // Returns true if the constructor was able to complete all of its
     // initializations (which may include calling GDI).
     bool isValid() const;
+    const bool fColorFont;
 
 protected:
     unsigned generateGlyphCount() override;
@@ -549,6 +555,8 @@ protected:
     void generateFontMetrics(SkPaint::FontMetrics*) override;
 
 private:
+    bool isColorFont() const;
+    bool generateColorGlyphs(SkGlyph* glyph) const;
     DWORD getGDIGlyphPath(const SkGlyph& glyph, UINT flags,
                           SkAutoSTMalloc<BUFFERSIZE, uint8_t>* glyphbuf);
 
@@ -598,6 +606,40 @@ static BYTE compute_quality(const SkScalerContext::Rec& rec) {
     }
 }
 
+bool SkScalerContext_GDI::isColorFont() const
+{
+    LogFontTypeface* typeface = reinterpret_cast<LogFontTypeface*>(getTypeface());
+
+    IDWriteFactory* factory = sk_get_dwrite_factory();
+    if (factory == NULL) return false;
+
+    SkTScopedComPtr<IDWriteGdiInterop> gdiIntereop;
+    SkTScopedComPtr<IDWriteFont> dwFont;
+    SkTScopedComPtr<IDWriteFontFace> dwFontFace;
+    SkTScopedComPtr<IDWriteFontFace2> fontFace2;
+
+    factory->GetGdiInterop(&gdiIntereop);
+    if (gdiIntereop.get() == NULL) return false;
+
+#ifdef UNICODE
+    gdiIntereop->CreateFontFromLOGFONT(&typeface->fLogFont, &dwFont);
+#else
+    LOGFONTW lfw;
+    memcpy(&lfw, &typeface->fLogFont, sizeof(lfw));
+    mbstowcs(lfw.lfFaceName, typeface->fLogFont.lfFaceName, LF_FACESIZE);
+    gdiIntereop->CreateFontFromLOGFONT(&lfw, &dwFont);
+#endif
+    if (dwFont.get() == NULL) return false;
+
+    dwFont->CreateFontFace(&dwFontFace);
+    if (dwFontFace.get() == NULL) return false;
+    
+    if (SUCCEEDED(dwFontFace->QueryInterface(&fontFace2)))
+      return fontFace2->IsColorFont() ? true : false;
+    
+    return false;
+}
+
 SkScalerContext_GDI::SkScalerContext_GDI(SkTypeface* rawTypeface,
                                                  const SkDescriptor* desc)
         : SkScalerContext(rawTypeface, desc)
@@ -606,6 +648,7 @@ SkScalerContext_GDI::SkScalerContext_GDI(SkTypeface* rawTypeface,
         , fFont(0)
         , fSC(0)
         , fGlyphCount(-1)
+        , fColorFont(isColorFont())
 {
     LogFontTypeface* typeface = reinterpret_cast<LogFontTypeface*>(rawTypeface);
 
@@ -838,6 +881,62 @@ void SkScalerContext_GDI::generateAdvance(SkGlyph* glyph) {
     this->generateMetrics(glyph);
 }
 
+bool SkScalerContext_GDI::generateColorGlyphs(SkGlyph* glyph) const {
+    if (!fColorFont) return false;
+
+    IDWriteFactory* factory = sk_get_dwrite_factory();
+    SkTScopedComPtr<IDWriteFactory2> factory2;
+    SkTScopedComPtr<IDWriteColorGlyphRunEnumerator> colorLayer;
+    SkTScopedComPtr<IDWriteGdiInterop> gdiIntereop;
+    SkTScopedComPtr<IDWriteFontFace> dwFontFace;
+
+    factory->QueryInterface(&factory2);
+
+    factory->GetGdiInterop(&gdiIntereop);
+    gdiIntereop->CreateFontFaceFromHdc(fDDC, &dwFontFace);
+
+    FLOAT advance = 0;
+    UINT16 glyphId = glyph->getGlyphID();
+    DWRITE_GLYPH_OFFSET offset;
+    offset.advanceOffset = 0.0f;
+    offset.ascenderOffset = 0.0f;
+
+    DWRITE_GLYPH_RUN run;
+    run.glyphCount = 1;
+    run.glyphAdvances = &advance;
+    run.fontFace = dwFontFace.get();
+    run.fontEmSize = fRec.fTextSize;
+    run.bidiLevel = 0;
+    run.glyphIndices = &glyphId;
+    run.isSideways = FALSE;
+    run.glyphOffsets = &offset;
+
+    if (FAILED(factory2->TranslateColorGlyphRun(0, 0, &run, NULL, DWRITE_MEASURING_MODE_NATURAL, NULL, 0, &colorLayer))) return false;
+
+    BOOL hasRun;
+    const DWRITE_COLOR_GLYPH_RUN* colorRun;
+    SkGlyph* curGlyph = glyph;
+    while (true) {
+        if (FAILED(colorLayer->MoveNext(&hasRun)) || !hasRun) {
+            break;
+        }
+        if (FAILED(colorLayer->GetCurrentRun(&colorRun))) {
+            break;
+        }
+
+        curGlyph->fNextGlyph = (SkGlyph*)curGlyph->fGlyphCache->allocGlyph(*curGlyph, *colorRun->glyphRun.glyphIndices);
+
+        curGlyph->fNextGlyph->fColor = SkColorSetARGBInline(
+            static_cast<U8CPU>(colorRun->runColor.a * 255), static_cast<U8CPU>(colorRun->runColor.r * 255),
+            static_cast<U8CPU>(colorRun->runColor.g * 255), static_cast<U8CPU>(colorRun->runColor.b * 255));
+        curGlyph->fNextGlyph->fNextGlyph = NULL;
+        curGlyph->fNextGlyph->fMaskFormat = fRec.fMaskFormat;
+
+        curGlyph = curGlyph->fNextGlyph;
+    }
+    return true;
+}
+
 void SkScalerContext_GDI::generateMetrics(SkGlyph* glyph) {
     SkASSERT(fDDC);
 
@@ -944,6 +1043,8 @@ void SkScalerContext_GDI::generateMetrics(SkGlyph* glyph) {
             glyph->fAdvanceY = SkScalarToFixed(advance.fY);
         }
     }
+
+    this->generateColorGlyphs(glyph);
 }
 
 static const MAT2 gMat2Identity = {{0, 1}, {0, 0}, {0, 0}, {0, 1}};
