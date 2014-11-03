@@ -213,6 +213,12 @@ public:
     SkScalerContext(SkTypeface*, const SkScalerContextEffects&, const SkDescriptor*);
     virtual ~SkScalerContext();
 
+#ifdef SK_BUILD_FOR_WIN32
+    virtual bool generateColorGlyphs(SkGlyph* glyph) const {
+        return false;
+    }
+#endif
+
     SkTypeface* getTypeface() const { return fTypeface.get(); }
 
     SkMask::Format getMaskFormat() const {

@@ -33,6 +33,7 @@
 #if SK_HAS_DWRITE_1_H
 #  include <dwrite_1.h>
 #endif
+#include <dwrite_2.h>
 
 /* Note:
  * In versions 8 and 8.1 of Windows, some calls in DWrite are not thread safe.
@@ -203,11 +204,22 @@ static bool is_axis_aligned(const SkScalerContext::Rec& rec) {
             both_zero(rec.fPost2x2[0][0], rec.fPost2x2[1][1]));
 }
 
+bool SkScalerContext_DW::isColorFont() const
+{
+    SkTScopedComPtr<IDWriteFontFace2> fontFace2;
+
+    if (SUCCEEDED(fTypeface->fDWriteFontFace->QueryInterface(&fontFace2)))
+        return fontFace2->IsColorFont() ? true : false;
+
+    return false;
+}
+
 SkScalerContext_DW::SkScalerContext_DW(DWriteFontTypeface* typeface,
                                        const SkScalerContextEffects& effects,
                                        const SkDescriptor* desc)
         : SkScalerContext(typeface, effects, desc)
         , fTypeface(SkRef(typeface))
+        , fColorFont(isColorFont())
         , fGlyphCount(-1) {
 
     // In general, all glyphs should use CLEARTYPE_NATURAL_SYMMETRIC
@@ -455,6 +467,59 @@ static bool glyph_check_and_set_bounds(SkGlyph* glyph, const RECT& bbox) {
     glyph->fHeight = SkToU16(bbox.bottom - bbox.top);
     glyph->fLeft = SkToS16(bbox.left);
     glyph->fTop = SkToS16(bbox.top);
+    return true;
+}
+
+bool SkScalerContext_DW::generateColorGlyphs(SkGlyph* glyph) const {
+    if (!fColorFont || glyph->fColorLayer) return false;
+
+    IDWriteFactory* factory = sk_get_dwrite_factory();
+    SkTScopedComPtr<IDWriteFactory2> factory2;
+    SkTScopedComPtr<IDWriteColorGlyphRunEnumerator> colorLayer;
+
+    HRESULT hr = factory->QueryInterface(&factory2);
+    if (!SUCCEEDED(hr)) return false;
+
+    FLOAT advance = 0;
+    UINT16 glyphId = glyph->getGlyphID();
+    DWRITE_GLYPH_OFFSET offset;
+    offset.advanceOffset = 0.0f;
+    offset.ascenderOffset = 0.0f;
+
+    DWRITE_GLYPH_RUN run;
+    run.glyphCount = 1;
+    run.glyphAdvances = &advance;
+    run.fontFace = fTypeface->fDWriteFontFace.get();
+    run.fontEmSize = fRec.fTextSize;
+    run.bidiLevel = 0;
+    run.glyphIndices = &glyphId;
+    run.isSideways = FALSE;
+    run.glyphOffsets = &offset;
+
+    hr = factory2->TranslateColorGlyphRun(0, 0, &run, NULL, DWRITE_MEASURING_MODE_NATURAL, NULL, 0, &colorLayer);
+    if (!SUCCEEDED(hr)) return false;
+
+    BOOL hasRun;
+    const DWRITE_COLOR_GLYPH_RUN* colorRun;
+
+    while (true) {
+        if (FAILED(colorLayer->MoveNext(&hasRun)) || !hasRun) {
+            break;
+        }
+        if (FAILED(colorLayer->GetCurrentRun(&colorRun))) {
+            break;
+        }
+
+        if (glyph->fColorLayer == NULL)
+            glyph->fColorLayer = new SkGlyph::ColorLayer();
+
+        SkGlyph::ColorRun* skColorRun = glyph->fColorLayer->push();
+        skColorRun->fNextGlyphId = *colorRun->glyphRun.glyphIndices;
+        skColorRun->fColor = SkColorSetARGBInline(
+          static_cast<U8CPU>(colorRun->runColor.a * 255), static_cast<U8CPU>(colorRun->runColor.r * 255),
+          static_cast<U8CPU>(colorRun->runColor.g * 255), static_cast<U8CPU>(colorRun->runColor.b * 255));
+    }
+    if (glyph->fColorLayer) glyph->fColorLayer->shrinkToFit();
     return true;
 }
 
