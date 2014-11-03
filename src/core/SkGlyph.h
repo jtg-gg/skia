@@ -23,6 +23,11 @@ class SkGlyphCache;
 #define kMaxGlyphWidth (1<<13)
 
 SK_BEGIN_REQUIRE_DENSE
+#ifdef SK_BUILD_FOR_WIN32
+#include "SkTDArray.h"
+#include "SkColor.h"
+#endif
+
 class SkGlyph {
     enum {
         kSubBits = 2,
@@ -48,6 +53,16 @@ class SkGlyph {
     uint8_t     fMaskFormat;
     int8_t      fRsbDelta, fLsbDelta;  // used by auto-kerning
     int8_t      fForceBW;
+
+#ifdef SK_BUILD_FOR_WIN32
+    // color glyph
+    struct ColorRun {
+        SkColor   fColor;
+        uint16_t  fNextGlyphId;
+    };
+    typedef SkTDArray<ColorRun> ColorLayer;
+    ColorLayer*    fColorLayer;
+#endif
 
     void initWithGlyphID(uint32_t glyph_id) {
         this->initCommon(MakeID(glyph_id));
@@ -136,6 +151,9 @@ class SkGlyph {
         fPath           = nullptr;
         fMaskFormat     = MASK_FORMAT_UNKNOWN;
         fForceBW        = 0;
+#ifdef SK_BUILD_FOR_WIN32
+        fColorLayer     = 0;
+#endif
     }
 
     static unsigned ID2Code(uint32_t id) {
