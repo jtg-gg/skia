@@ -44,6 +44,10 @@ struct SkGlyph {
     SkGlyph*      fNextGlyph;
     SkChunkAlloc* fGlyphAlloc;
 #endif
+    
+#ifdef SK_BUILD_FOR_MAC
+    float       fScale;
+#endif
 
     void init(uint32_t id) {
         fID             = id;
@@ -55,6 +59,9 @@ struct SkGlyph {
         fColor          = 0;
         fNextGlyph      = NULL;
         fGlyphAlloc     = NULL;
+#endif
+#ifdef SK_BUILD_FOR_MAC
+        fScale          = 1.0f;
 #endif
     }
 

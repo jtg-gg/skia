@@ -772,8 +772,8 @@ SkScalerContext_Mac::SkScalerContext_Mac(SkTypeface_Mac* typeface,
 
     // Color Bitmap Font has different matrix calculation
     if (fColorBitmapFont) {
-          fCTColorBitmapFont.reset(CTFontCreateCopyWithAttributes(ctFont, 1, &CGAffineTransformIdentity, ctFontDesc));
-          fCTColorBitmapFontMat = transform;
+        fCTColorBitmapFont.reset(CTFontCreateCopyWithAttributes(ctFont, 1, &CGAffineTransformIdentity, ctFontDesc));
+        fCTColorBitmapFontMat = transform;
     }
 
     SkScalar emPerFUnit = SkScalarInvert(SkIntToScalar(CGFontGetUnitsPerEm(fCGFont)));
@@ -879,6 +879,7 @@ CGRGBPixel* Offscreen::getCG(const SkScalerContext_Mac& context, const SkGlyph& 
         CGContextSaveGState(fCG);
         CGContextTranslateCTM(fCG, -glyph.fLeft + subX, glyph.fTop + glyph.fHeight - subY);
         CGContextConcatCTM(fCG, context.fCTColorBitmapFontMat);
+        CGContextScaleCTM(fCG, glyph.fScale, glyph.fScale);
     }
   
     static const CGPoint pos = {0, 0};
@@ -1040,7 +1041,13 @@ void SkScalerContext_Mac::generateMetrics(SkGlyph* glyph) {
         // CTFontGetBoundingRectsForGlyphs produces cgBounds in CG units (pixels, y up).
         CGRect cgBounds;
         if (fColorBitmapFont) {
+          CGRect temp;
+          CTFontGetBoundingRectsForGlyphs(fCTColorBitmapFont, kCTFontHorizontalOrientation,
+                                            &cgGlyph, &temp, 1);
+            
             CTFontGetOpticalBoundsForGlyphs(fCTColorBitmapFont, &cgGlyph, &cgBounds, 1, 0);
+            if (temp.size.width > cgBounds.size.width)
+                glyph->fScale = cgBounds.size.width / temp.size.width;
             cgBounds = CGRectApplyAffineTransform(cgBounds, fCTColorBitmapFontMat);
         }
         else
