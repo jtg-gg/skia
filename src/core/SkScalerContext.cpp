@@ -171,7 +171,12 @@ void SkScalerContext::getMetrics(SkGlyph* glyph) {
             const SkIRect ir = devPath.getBounds().roundOut();
 
             if (ir.isEmpty() || !ir.is16Bit()) {
-                goto SK_ERROR;
+                if (fRec.fMaskFormat != SkMask::kARGB32_Format)
+                    goto SK_ERROR;
+                else {
+                    glyph->fMaskFormat = fRec.fMaskFormat;
+                    return;
+                }
             }
             glyph->fLeft    = ir.fLeft;
             glyph->fTop     = ir.fTop;
@@ -476,12 +481,6 @@ void SkScalerContext::getImage(const SkGlyph& origGlyph) {
     // (i.e. larger) than what our caller allocated by looking at origGlyph.
     SkAutoMalloc tmpGlyphImageStorage;
 
-    // If we are going to draw-from-path, then we cannot generate color, since
-    // the path only makes a mask. This case should have been caught up in
-    // generateMetrics().
-    SkASSERT(!fGenerateImageFromPath ||
-             SkMask::kARGB32_Format != origGlyph.fMaskFormat);
-
     if (fMaskFilter) {   // restore the prefilter bounds
         tmpGlyph.init(origGlyph.fID);
 
@@ -504,7 +503,7 @@ void SkScalerContext::getImage(const SkGlyph& origGlyph) {
         glyph = &tmpGlyph;
     }
 
-    if (fGenerateImageFromPath) {
+    if (fGenerateImageFromPath && SkMask::kARGB32_Format != origGlyph.fMaskFormat) {
         SkPath      devPath, fillPath;
         SkMatrix    fillToDevMatrix;
         SkMask      mask;
