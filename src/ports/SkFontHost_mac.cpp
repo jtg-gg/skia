@@ -846,7 +846,8 @@ CGRGBPixel* Offscreen::getCG(const SkScalerContext_Mac& context, const SkGlyph& 
         CGContextSetTextDrawingMode(fCG, kCGTextFill);
 
         // Draw black on white to create mask. (Special path exists to speed this up in CG.)
-        CGContextSetGrayFillColor(fCG, 0.0f, 1.0f);
+        if (glyph.fMaskFormat != SkMask::kARGB32_Format)
+            CGContextSetGrayFillColor(fCG, 0.0f, 1.0f);
 
         // force our checks below to happen
         fDoAA = !doAA;
