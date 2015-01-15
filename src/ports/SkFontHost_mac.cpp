@@ -865,7 +865,8 @@ CGRGBPixel* Offscreen::getCG(const SkScalerContext_Mac& context, const SkGlyph& 
 
         // Draw white on black to create mask.
         // TODO: Draw black on white and invert, CG has a special case codepath.
-        CGContextSetGrayFillColor(fCG, 1.0f, 1.0f);
+        if (glyph.fMaskFormat != SkMask::kARGB32_Format)
+            CGContextSetGrayFillColor(fCG, 1.0f, 1.0f);
 
         // force our checks below to happen
         fDoAA = !doAA;
