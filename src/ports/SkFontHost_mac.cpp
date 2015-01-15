@@ -855,7 +855,8 @@ CGRGBPixel* Offscreen::getCG(const SkScalerContext_Mac& context, const SkGlyph& 
 
         // Draw white on black to create mask.
         // TODO: Draw black on white and invert, CG has a special case codepath.
-        CGContextSetGrayFillColor(fCG, 1.0f, 1.0f);
+        if (glyph.fMaskFormat != SkMask::kARGB32_Format)
+            CGContextSetGrayFillColor(fCG, 1.0f, 1.0f);
 
         // force our checks below to happen
         fDoAA = !doAA;
@@ -1340,7 +1341,10 @@ void SkScalerContext_Mac::generatePath(const SkGlyph& glyph, SkPath* path) {
      */
     if (fRec.fFlags & SkScalerContext::kSubpixelPositioning_Flag) {
         SkMatrix m;
-        fRec.getSingleMatrix(&m);
+        if (fRec.fMaskFormat != SkMask::kARGB32_Format)
+            fRec.getSingleMatrix(&m);
+        else
+            fRec.getSingleMatrixWithoutTextSize(&m);
 
         // start out by assuming that we want no hining in X and Y
         scaleX = scaleY = kScaleForSubPixelPositionHinting;
@@ -1358,7 +1362,7 @@ void SkScalerContext_Mac::generatePath(const SkGlyph& glyph, SkPath* path) {
 
         CGAffineTransform xform = MatrixToCGAffineTransform(m, scaleX, scaleY);
         // need to release font when we're done
-        font = CTFontCreateCopyWithAttributes(fCTFont, 1, &xform, NULL);
+        font = CTFontCreateCopyWithAttributes(fCTFont, fRec.fMaskFormat != SkMask::kARGB32_Format ? 1 : fRec.fTextSize, &xform, NULL);
     }
 
     CGGlyph cgGlyph = (CGGlyph)glyph.getGlyphID();
