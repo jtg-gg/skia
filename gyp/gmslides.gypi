@@ -47,6 +47,7 @@
         '../gm/cgm.c',
         '../gm/colorcube.cpp',
         '../gm/coloremoji.cpp',
+        '../gm/coloremoji_win.cpp',		
         '../gm/colorfilterimagefilter.cpp',
         '../gm/colorfilters.cpp',
         '../gm/colormatrix.cpp',
