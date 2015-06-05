@@ -192,12 +192,12 @@ static bool is_axis_aligned(const SkScalerContext::Rec& rec) {
 
 bool SkScalerContext_DW::isColorFont() const
 {
-  SkTScopedComPtr<IDWriteFontFace2> fontFace2;
+    SkTScopedComPtr<IDWriteFontFace2> fontFace2;
 
-  if (SUCCEEDED(fTypeface->fDWriteFontFace->QueryInterface(&fontFace2)))
-    return fontFace2->IsColorFont() ? true : false;
+    if (SUCCEEDED(fTypeface->fDWriteFontFace->QueryInterface(&fontFace2)))
+        return fontFace2->IsColorFont() ? true : false;
 
-  return false;
+    return false;
 }
 
 SkScalerContext_DW::SkScalerContext_DW(DWriteFontTypeface* typeface,
@@ -446,8 +446,8 @@ static bool glyph_check_and_set_bounds(SkGlyph* glyph, const RECT& bbox) {
     return true;
 }
 
-bool SkScalerContext_DW::generateColorGlyphs(SkGlyph* glyph) const {
-    if (!fColorFont) return false;
+bool SkScalerContext_DW::generateColorGlyphs(SkGlyph* glyph, SkGlyphCache* glyphCache) const {
+    if (!fColorFont || glyph->fNextGlyphId) return false;
 
     IDWriteFactory* factory = sk_get_dwrite_factory();
     SkTScopedComPtr<IDWriteFactory2> factory2;
@@ -477,6 +477,7 @@ bool SkScalerContext_DW::generateColorGlyphs(SkGlyph* glyph) const {
 
     BOOL hasRun;
     const DWRITE_COLOR_GLYPH_RUN* colorRun;
+    const SkGlyph refGlyph = *glyph;
     SkGlyph* curGlyph = glyph;
     while (true) {
         if (FAILED(colorLayer->MoveNext(&hasRun)) || !hasRun) {
@@ -486,19 +487,20 @@ bool SkScalerContext_DW::generateColorGlyphs(SkGlyph* glyph) const {
             break;
         }
 
-        curGlyph->fNextGlyph = (SkGlyph*)curGlyph->fGlyphCache->allocGlyph(*curGlyph, *colorRun->glyphRun.glyphIndices);
+        curGlyph->fNextGlyphId = *colorRun->glyphRun.glyphIndices;
+        SkGlyph* nextGlyph = glyphCache->allocGlyph(refGlyph, *colorRun->glyphRun.glyphIndices);
 
-        curGlyph->fNextGlyph->fColor = SkColorSetARGBInline(
+        nextGlyph->fColor = SkColorSetARGBInline(
           static_cast<U8CPU>(colorRun->runColor.a * 255), static_cast<U8CPU>(colorRun->runColor.r * 255),
           static_cast<U8CPU>(colorRun->runColor.g * 255), static_cast<U8CPU>(colorRun->runColor.b * 255));
-        curGlyph->fNextGlyph->fNextGlyph = NULL;
-        curGlyph->fNextGlyph->fMaskFormat = fRec.fMaskFormat;
 
-        curGlyph = curGlyph->fNextGlyph;
+        nextGlyph->fNextGlyphId = 0;
+        nextGlyph->fMaskFormat = fRec.fMaskFormat;
+
+        curGlyph = nextGlyph;
     }
     return true;
 }
-
 
 void SkScalerContext_DW::generateMetrics(SkGlyph* glyph) {
     glyph->fWidth = 0;
@@ -513,8 +515,6 @@ void SkScalerContext_DW::generateMetrics(SkGlyph* glyph) {
          "Requested bounding box could not be determined.");
 
     if (glyph_check_and_set_bounds(glyph, bbox)) {
-        // generate color glyphs should be called after all the vars in SkGlyph struct initialized
-        this->generateColorGlyphs(glyph);
         return;
     }
 
@@ -533,9 +533,6 @@ void SkScalerContext_DW::generateMetrics(SkGlyph* glyph) {
     }
     // TODO: handle the case where a request for DWRITE_TEXTURE_ALIASED_1x1
     // fails, and try DWRITE_TEXTURE_CLEARTYPE_3x1.
-    
-    // generate color glyphs should be called after all the vars in SkGlyph struct initialized
-    this->generateColorGlyphs(glyph);
 }
 
 void SkScalerContext_DW::generateFontMetrics(SkPaint::FontMetrics* metrics) {

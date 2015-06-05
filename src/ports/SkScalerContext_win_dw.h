@@ -44,7 +44,7 @@ private:
     
     bool isColorFont() const;
 
-    bool generateColorGlyphs(SkGlyph* glyph) const;
+    virtual bool generateColorGlyphs(SkGlyph* glyph, SkGlyphCache* glyphCache) const;
 
     SkTDArray<uint8_t> fBits;
     /** The total matrix without the text height scale. */

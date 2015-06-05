@@ -54,8 +54,7 @@ class SkGlyph {
 #ifdef SK_BUILD_FOR_WIN32
     // color glyph
     SkColor       fColor;
-    SkGlyph*      fNextGlyph;
-    SkGlyphCache* fGlyphCache;
+    uint16_t      fNextGlyphId;
 #endif
 
     void initWithGlyphID(uint32_t glyph_id) {
@@ -137,8 +136,7 @@ class SkGlyph {
         fForceBW        = 0;
 #ifdef SK_BUILD_FOR_WIN32
         fColor          = 0;
-        fNextGlyph      = NULL;
-        fGlyphCache     = NULL;
+        fNextGlyphId    = 0;
 #endif
     }
 

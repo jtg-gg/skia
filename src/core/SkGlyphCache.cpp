@@ -239,6 +239,13 @@ SkGlyph* SkGlyphCache::lookupByChar(SkUnichar charCode, MetricsType type, SkFixe
             fScalerContext->getMetrics(glyph);
         }
     }
+#ifdef SK_BUILD_FOR_WIN32
+    uint32_t refID = glyph->fID;
+    if (type == kFull_MetricsType && fScalerContext->generateColorGlyphs(glyph, this)) {
+        if (refID != glyph->fID)
+            glyph = lookupByCombinedID(refID, type);
+    }
+#endif
     return glyph;
 }
 
@@ -258,16 +265,26 @@ SkGlyph* SkGlyphCache::lookupByCombinedID(uint32_t id, MetricsType type) {
            fScalerContext->getMetrics(glyph);
         }
     }
+#ifdef SK_BUILD_FOR_WIN32
+    uint32_t refID = glyph->fID;
+    if (type == kFull_MetricsType && fScalerContext->generateColorGlyphs(glyph, this)) {
+        if (refID != glyph->fID)
+            glyph = lookupByCombinedID(refID, type);
+    }
+#endif
     return glyph;
 }
 
 #ifdef SK_BUILD_FOR_WIN32
-SkGlyph* SkGlyphCache::allocGlyph(const SkGlyph& glyph, uint16_t id) {
-    SkGlyph* result = (SkGlyph*) fGlyphAlloc.alloc(sizeof(SkGlyph), SkChunkAlloc::kThrow_AllocFailType);
-    *result = glyph;
-    result->fID = id;
-    fMemoryUsed += sizeof(SkGlyph);
-    return result;
+SkGlyph* SkGlyphCache::allocGlyph(const SkGlyph& refGlyph, uint16_t id) {
+    uint32_t combinedID = SkGlyph::MakeID(id, refGlyph.getSubXFixed(), refGlyph.getSubYFixed());
+    //kFull_MetricsType does not work here, it will cause infinite recursion ??
+    SkGlyph* glyph = lookupByCombinedID(combinedID, kJustAdvance_MetricsType);
+    //this copy from ref glyph is needed as GDI can't get the glyph information
+    //refGlyph is guaranteed to be kFull_MetricsType, copying the class should be faster
+    *glyph = refGlyph;
+    glyph->fID = combinedID;
+    return glyph;
 }
 #endif
 
@@ -310,10 +327,6 @@ uint16_t SkGlyphCache::lookupMetrics(uint32_t id, MetricsType mtype) {
 
     glyph = fGlyphArray.insert(glyph_index);
     glyph->initGlyphFromCombinedID(id);
-
-#ifdef SK_BUILD_FOR_WIN32
-    glyph->fGlyphCache = this;
-#endif
 
     if (kJustAdvance_MetricsType == mtype) {
         fScalerContext->getAdvance(glyph);

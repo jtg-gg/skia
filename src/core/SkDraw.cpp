@@ -1476,26 +1476,25 @@ static void D1G_RectClip(const SkDraw1Glyph& state, Sk48Dot16 fx, Sk48Dot16 fy, 
         bounds = &storage;
     }
 
+#ifdef SK_BUILD_FOR_WIN32
     mask.fRowBytes = glyph.rowBytes();
     mask.fFormat = static_cast<SkMask::Format>(glyph.fMaskFormat);
-
-#ifdef SK_BUILD_FOR_WIN32
-    for (SkGlyph* i = glyph.fNextGlyph; i != NULL; i = i->fNextGlyph) {
-        uint8_t* aa = (uint8_t*)i->fImage;
-        if (NULL == aa) {
-            aa = (uint8_t*)state.fCache->findImage(*i);
+    if (glyph.fNextGlyphId || glyph.fColor) { // this is to handle the color glyph
+        for (const SkGlyph* i = glyph.fColor ? &glyph : &state.fCache->getGlyphIDMetrics(glyph.fNextGlyphId, glyph.getSubXFixed(), glyph.getSubYFixed());
+          ; i = &state.fCache->getGlyphIDMetrics(i->fNextGlyphId, glyph.getSubXFixed(), glyph.getSubYFixed())) {
+            uint8_t* aa = (uint8_t*)i->fImage;
             if (NULL == aa) {
-                continue; // can't rasterize glyph
+                aa = (uint8_t*)state.fCache->findImage(*i);
+                if (NULL == aa) {
+                    continue; // can't rasterize glyph
+                }
             }
+            mask.fImage = aa;
+            SkARGB32_Opaque_Blitter* blitter = static_cast<SkARGB32_Opaque_Blitter*>(state.fBlitter);
+            blitter->blitMask(mask, *bounds, &i->fColor);
+            if (i->fNextGlyphId == 0) return; // the for loop breaks here 
         }
-
-        mask.fImage = aa;
-        SkARGB32_Opaque_Blitter* blitter = static_cast<SkARGB32_Opaque_Blitter*>(state.fBlitter);
-        blitter->blitMask(mask, *bounds, &i->fColor);
-     }
-    
-    if (glyph.fNextGlyph) // color glyph, drawing finish
-        return;
+    }
 #endif
 
     uint8_t* aa = (uint8_t*)glyph.fImage;
@@ -1506,6 +1505,8 @@ static void D1G_RectClip(const SkDraw1Glyph& state, Sk48Dot16 fx, Sk48Dot16 fy, 
         }
     }
 
+    mask.fRowBytes = glyph.rowBytes();
+    mask.fFormat = static_cast<SkMask::Format>(glyph.fMaskFormat);
     mask.fImage = aa;
     state.blitMask(mask, *bounds);
 }
