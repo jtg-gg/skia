@@ -556,7 +556,7 @@ protected:
 
 private:
     bool isColorFont() const;
-    bool generateColorGlyphs(SkGlyph* glyph) const;
+    virtual bool generateColorGlyphs(SkGlyph* glyph, SkGlyphCache* glyphCache) const;
     DWORD getGDIGlyphPath(const SkGlyph& glyph, UINT flags,
                           SkAutoSTMalloc<BUFFERSIZE, uint8_t>* glyphbuf);
 
@@ -635,7 +635,7 @@ bool SkScalerContext_GDI::isColorFont() const
     if (dwFontFace.get() == NULL) return false;
     
     if (SUCCEEDED(dwFontFace->QueryInterface(&fontFace2)))
-      return fontFace2->IsColorFont() ? true : false;
+        return fontFace2->IsColorFont() ? true : false;
     
     return false;
 }
@@ -881,8 +881,8 @@ void SkScalerContext_GDI::generateAdvance(SkGlyph* glyph) {
     this->generateMetrics(glyph);
 }
 
-bool SkScalerContext_GDI::generateColorGlyphs(SkGlyph* glyph) const {
-    if (!fColorFont) return false;
+bool SkScalerContext_GDI::generateColorGlyphs(SkGlyph* glyph, SkGlyphCache* glyphCache) const {
+    if (!fColorFont || glyph->fNextGlyphId) return false;
 
     IDWriteFactory* factory = sk_get_dwrite_factory();
     SkTScopedComPtr<IDWriteFactory2> factory2;
@@ -915,6 +915,7 @@ bool SkScalerContext_GDI::generateColorGlyphs(SkGlyph* glyph) const {
 
     BOOL hasRun;
     const DWRITE_COLOR_GLYPH_RUN* colorRun;
+    const SkGlyph refGlyph = *glyph;
     SkGlyph* curGlyph = glyph;
     while (true) {
         if (FAILED(colorLayer->MoveNext(&hasRun)) || !hasRun) {
@@ -924,15 +925,17 @@ bool SkScalerContext_GDI::generateColorGlyphs(SkGlyph* glyph) const {
             break;
         }
 
-        curGlyph->fNextGlyph = (SkGlyph*)curGlyph->fGlyphCache->allocGlyph(*curGlyph, *colorRun->glyphRun.glyphIndices);
+        curGlyph->fNextGlyphId = *colorRun->glyphRun.glyphIndices;
+        SkGlyph* nextGlyph = glyphCache->allocGlyph(refGlyph, *colorRun->glyphRun.glyphIndices);
 
-        curGlyph->fNextGlyph->fColor = SkColorSetARGBInline(
-            static_cast<U8CPU>(colorRun->runColor.a * 255), static_cast<U8CPU>(colorRun->runColor.r * 255),
-            static_cast<U8CPU>(colorRun->runColor.g * 255), static_cast<U8CPU>(colorRun->runColor.b * 255));
-        curGlyph->fNextGlyph->fNextGlyph = NULL;
-        curGlyph->fNextGlyph->fMaskFormat = fRec.fMaskFormat;
+        nextGlyph->fColor = SkColorSetARGBInline(
+          static_cast<U8CPU>(colorRun->runColor.a * 255), static_cast<U8CPU>(colorRun->runColor.r * 255),
+          static_cast<U8CPU>(colorRun->runColor.g * 255), static_cast<U8CPU>(colorRun->runColor.b * 255));
 
-        curGlyph = curGlyph->fNextGlyph;
+        nextGlyph->fNextGlyphId = 0;
+        nextGlyph->fMaskFormat = fRec.fMaskFormat;
+
+        curGlyph = nextGlyph;
     }
     return true;
 }
@@ -1043,8 +1046,6 @@ void SkScalerContext_GDI::generateMetrics(SkGlyph* glyph) {
             glyph->fAdvanceY = SkScalarToFixed(advance.fY);
         }
     }
-
-    this->generateColorGlyphs(glyph);
 }
 
 static const MAT2 gMat2Identity = {{0, 1}, {0, 0}, {0, 0}, {0, 1}};

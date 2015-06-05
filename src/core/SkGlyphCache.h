@@ -65,7 +65,7 @@ public:
     const SkGlyph& getGlyphIDMetrics(uint16_t, SkFixed x, SkFixed y);
 
 #ifdef SK_BUILD_FOR_WIN32
-    SkGlyph* allocGlyph(const SkGlyph& glyph, uint16_t id);
+    SkGlyph* allocGlyph(const SkGlyph& refGlyph, uint16_t id);
 #endif
 
     /** Return the glyphID for the specified Unichar. If the char has already
