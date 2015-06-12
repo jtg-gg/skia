@@ -1468,10 +1468,9 @@ static void D1G_RectClip(const SkDraw1Glyph& state, SkFixed fx, SkFixed fy, cons
         bounds = &storage;
     }
 
+#ifdef SK_BUILD_FOR_WIN32
     mask.fRowBytes = glyph.rowBytes();
     mask.fFormat = static_cast<SkMask::Format>(glyph.fMaskFormat);
-
-#ifdef SK_BUILD_FOR_WIN32
     for (SkGlyph* i = glyph.fNextGlyph; i != NULL; i = i->fNextGlyph) {
         uint8_t* aa = (uint8_t*)i->fImage;
         if (NULL == aa) {
@@ -1498,6 +1497,8 @@ static void D1G_RectClip(const SkDraw1Glyph& state, SkFixed fx, SkFixed fy, cons
         }
     }
 
+    mask.fRowBytes = glyph.rowBytes();
+    mask.fFormat = static_cast<SkMask::Format>(glyph.fMaskFormat);
     mask.fImage = aa;
     state.blitMask(mask, *bounds);
 }
