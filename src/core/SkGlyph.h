@@ -24,6 +24,7 @@ class SkGlyphCache;
 
 SK_BEGIN_REQUIRE_DENSE
 #ifdef SK_BUILD_FOR_WIN32
+#include "SkRefCnt.h"
 #include "SkTDArray.h"
 #include "SkColor.h"
 #endif
@@ -76,7 +77,9 @@ public:
         SkColor   fColor;
         uint16_t  fNextGlyphId;
     };
-    typedef SkTDArray<ColorRun> ColorLayer;
+    class ColorLayer : public SkTDArray<ColorRun>, public SkRefCnt {
+        virtual ~ColorLayer() {}
+    };
     ColorLayer*    fColorLayer;
 #endif
 

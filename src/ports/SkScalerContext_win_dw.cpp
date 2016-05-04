@@ -500,7 +500,6 @@ bool SkScalerContext_DW::generateColorGlyphs(SkGlyph* glyph) const {
 
     BOOL hasRun;
     const DWRITE_COLOR_GLYPH_RUN* colorRun;
-    SkGlyph::ColorLayer skColorLayer;
 
     while (true) {
         if (FAILED(colorLayer->MoveNext(&hasRun)) || !hasRun) {
@@ -510,14 +509,16 @@ bool SkScalerContext_DW::generateColorGlyphs(SkGlyph* glyph) const {
             break;
         }
 
-        SkGlyph::ColorRun* skColorRun = skColorLayer.push();
+        if (glyph->fColorLayer == NULL)
+            glyph->fColorLayer = new SkGlyph::ColorLayer();
+
+        SkGlyph::ColorRun* skColorRun = glyph->fColorLayer->push();
         skColorRun->fNextGlyphId = *colorRun->glyphRun.glyphIndices;
         skColorRun->fColor = SkColorSetARGBInline(
           static_cast<U8CPU>(colorRun->runColor.a * 255), static_cast<U8CPU>(colorRun->runColor.r * 255),
           static_cast<U8CPU>(colorRun->runColor.g * 255), static_cast<U8CPU>(colorRun->runColor.b * 255));
     }
-    if (skColorLayer.count())
-        glyph->fColorLayer = new SkGlyph::ColorLayer(skColorLayer);
+    if (glyph->fColorLayer) glyph->fColorLayer->shrinkToFit();
     return true;
 }
 

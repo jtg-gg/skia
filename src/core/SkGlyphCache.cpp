@@ -53,13 +53,23 @@ SkGlyphCache::SkGlyphCache(SkTypeface* typeface, const SkDescriptor* desc, SkSca
 }
 
 SkGlyphCache::~SkGlyphCache() {
+#ifdef SK_BUILD_FOR_WIN32
+    fGlyphMap.foreach([](SkGlyph* g) {
+        if (g->fColorLayer) {
+#ifdef COLORLAYER_DEBUG
+        if (g->fColorLayer->unique()) return;
+#endif
+            g->fColorLayer->unref();
+        }
+    });
+#endif
     fGlyphMap.foreach ([](SkGlyph* g) { 
+#ifdef COLORLAYER_DEBUG
+        SkASSERT(!g->fColorLayer || g->fColorLayer->getRefCnt() == 1);
+#endif
         if (g->fPathData) {
             delete g->fPathData->fPath;
         } } );
-#ifdef SK_BUILD_FOR_WIN32
-    fGlyphMap.foreach([](SkGlyph* g) { delete g->fColorLayer; });
-#endif
     SkDescriptor::Free(fDesc);
     delete fScalerContext;
     this->invokeAndRemoveAuxProcs();
@@ -177,16 +187,25 @@ SkGlyph* SkGlyphCache::lookupByPackedGlyphID(PackedGlyphID packedGlyphID, Metric
 #ifdef SK_BUILD_FOR_WIN32
     if (type == kFull_MetricsType && fScalerContext->generateColorGlyphs(glyph)) {
         const SkGlyph refGlyph = *glyph;
+        //fColorLayer is ref counted, do it properly
+        refGlyph.fColorLayer->ref();
         for (const SkGlyph::ColorRun* colorRun = refGlyph.fColorLayer->begin(); colorRun != refGlyph.fColorLayer->end(); colorRun++) {
             uint32_t combinedID = SkGlyph::MakeID(colorRun->fNextGlyphId, refGlyph.getSubXFixed(), refGlyph.getSubYFixed());
             //kFull_MetricsType does not work here, it will cause infinite recursion ??
             SkGlyph* colorGlyph = lookupByPackedGlyphID(combinedID, kJustAdvance_MetricsType);
 
+            if (colorGlyph->fColorLayer != NULL) {
+                SkASSERT(!colorGlyph->fColorLayer->unique());
+                colorGlyph->fColorLayer->unref();
+            }
             //this copy from ref glyph is needed for blitting the color layers using the settings from refGlyph
             //refGlyph is guaranteed to be kFull_MetricsType, copying the class should be faster
             *colorGlyph = refGlyph;
             colorGlyph->fID = combinedID;
+            colorGlyph->fColorLayer->ref();
         }
+        SkASSERT(!refGlyph.fColorLayer->unique());
+        refGlyph.fColorLayer->unref();
         // glyph memory address might have changed during generateColorGlyphs
         glyph = lookupByPackedGlyphID(refGlyph.fID, type);
     }
